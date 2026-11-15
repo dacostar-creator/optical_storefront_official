@@ -31,8 +31,9 @@ import { STAGES, STAGE_BY_KEY, money, orderLabel, setOrderStage, stageErrorText 
 import { adminFetch } from "./adminApi.js";
 import { DELETE_REASONS, collectPayment, deleteSale, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, moveSale, photoDataUrl, posContext, setStoreFramePhoto, updateSale, voidSale } from "./posApi.js";
 import PosCapture from "./PosCapture.jsx";
-import RxForm, { RxDateInput } from "./PosRx.jsx";
-import { fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
+import RxForm from "./PosRx.jsx";
+import { EMPTY_RX, fromRx, hasRxErrors, inferType, num, toRx, validateRx } from "./rxRules.js";
+import PaymentCorrection from "./PaymentCorrection.jsx";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
 import { WearingPhotoPanel } from "./WearingPhoto.jsx";
@@ -98,7 +99,9 @@ function RxGrid({ rx }) {
  * servidor vuelve a validar todo con las reglas de la caja y nunca toca
  * artículos, precios ni cobros.
  */
-function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = false, busy, onSave, onCancel }) {
+function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = false, rxMulti = false, busy, onSave, onCancel }) {
+  // «Graduación pendiente» (backend lib/rx-pending.ts): la receta se escribe aquí por primera vez.
+  const rxPending = sale.rx_pending === true && !rx;
   const { t } = useLang();
   const initCust = useMemo(() => ({
     first_name: customer?.first_name || "", last_name: customer?.last_name || "", email: customer?.email || "", phone: customer?.phone || "", birth_date: customer?.birth_date || "",
@@ -110,14 +113,14 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
   const [promised, setPromised] = useState(sale.promised_on || "");
   const [note, setNote] = useState(sale.internal_note || "");
   const [rxOpen, setRxOpen] = useState(startWithRx);
-  const initRx = useMemo(() => (rx ? fromRx(rx) : null), [rx]);
+  // Pendiente: el formulario arranca en el tipo del lente vendido (un progresivo pide la adición).
+  const initRx = useMemo(() => (rx ? fromRx(rx) : rxPending ? { ...EMPTY_RX, type: rxMulti ? "multifocal" : "sv", od: { ...EMPTY_RX.od }, os: { ...EMPTY_RX.os } } : null), [rx, rxPending, rxMulti]);
   const [rxForm, setRxForm] = useState(initRx);
   useEffect(() => setRxForm(initRx), [initRx]);
-  const [rxDate, setRxDate] = useState("");
   const [showRxErrors, setShowRxErrors] = useState(false);
 
   const custChanged = Boolean(customer) && JSON.stringify(cust) !== JSON.stringify(initCust);
-  const rxChanged = rxOpen && Boolean(rxForm) && (JSON.stringify(rxForm) !== JSON.stringify(initRx) || Boolean(rxDate));
+  const rxChanged = rxOpen && Boolean(rxForm) && JSON.stringify(rxForm) !== JSON.stringify(initRx);
   const body = () => {
     const b = {};
     if (custChanged) {
@@ -130,12 +133,14 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
     if (delivery !== (sale.delivery === "ship" ? "ship" : "pickup")) b.delivery = delivery;
     if ((promised || null) !== (sale.promised_on || null)) b.promised_on = promised || null;
     if (note.trim() !== (sale.internal_note || "").trim()) b.internal_note = note.trim() || null;
-    if (rxChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxDate || null };
+    if (rxChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxForm.rx_date || null };
     return b;
   };
   const changes = Object.keys(body()).length;
   const save = () => {
     if (rxChanged && hasRxErrors(validateRx(rxForm, rxForm.type || inferType(rxForm)).errors)) { setShowRxErrors(true); return; }
+    // La receta que estaba pendiente necesita al menos la esfera de los dos ojos.
+    if (rxPending && rxOpen && (num(rxForm?.od?.sph) === null || num(rxForm?.os?.sph) === null)) { setShowRxErrors(true); return; }
     onSave(body());
   };
   const field = (k, label, extra = {}) => (
@@ -176,14 +181,13 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
       </label>
       {rxAllowed && initRx && (
         <fieldset className="sd-edit-group">
-          <legend>{t("adm.sd.edit.rx")}</legend>
+          <legend>{t(rxPending ? "adm.sd.edit.rxAdd" : "adm.sd.edit.rx")}</legend>
           {!rxOpen ? (
-            <div><button type="button" className="btn-sm" disabled={busy} onClick={() => setRxOpen(true)}><Icon name="eye" size={13} /> {t("adm.sd.edit.rxEdit")}</button></div>
+            <div><button type="button" className="btn-sm" disabled={busy} onClick={() => setRxOpen(true)}><Icon name="eye" size={13} /> {t(rxPending ? "adm.sd.edit.rxAdd" : "adm.sd.edit.rxEdit")}</button></div>
           ) : (
             <>
               <RxForm value={rxForm} onChange={setRxForm} mode="new" disabled={busy} showErrors={showRxErrors} idp="sd-edit-rx" />
-              <div className="sd-edit-field"><span>{t("adm.sd.edit.rxDate")}</span><RxDateInput value={rxDate} onChange={setRxDate} ariaLabel={t("adm.sd.edit.rxDate")} disabled={busy} /></div>
-              <small className="sd-hint">{t("adm.sd.edit.rxHint")}</small>
+              <small className="sd-hint">{t(rxPending ? "adm.sd.edit.rxAddHint" : "adm.sd.edit.rxHint")}</small>
             </>
           )}
         </fieldset>
@@ -337,6 +341,8 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   const [voiding, setVoiding] = useState({ open: false, reason: "", note: "" });
   // Después de la venta: "edit" (corregir datos), "move" (otra tienda) o "delete"; solo uno abierto a la vez.
   const [mode, setMode] = useState(null);
+  // «Corregir pagos» (dueño, 15-nov-2026): abre el editor de los pagos de la venta.
+  const [fixPay, setFixPay] = useState(false);
   // «Corregir la receta» junto a la receta abre el formulario ya con la receta desplegada.
   const [editRx, setEditRx] = useState(false);
   const [moveTo, setMoveTo] = useState("");
@@ -370,7 +376,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     setData(null); setDoc(null); setCustomer(null); setRxDoc(null);
     setPay({ method_code: "", amount: "", details: {} });
     setVoiding({ open: false, reason: "", note: "" });
-    setMode(null); setMoveTo(""); setDel({ reason: "", note: "" });
+    setMode(null); setMoveTo(""); setDel({ reason: "", note: "" }); setFixPay(false);
     Promise.all([fetchSale(saleId), fetchSaleDocument(saleId, "receipt").then((r) => r.document).catch(() => null)])
       .then(([d, dc]) => {
         if (!on) return;
@@ -720,6 +726,14 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
               {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
+              {s.rx_pending && s.status !== "voided" && (
+                <div className="sd-banner warn sd-rx-pending">
+                  <span><b>{t("adm.pos.rx.pending")}</b> · {t("adm.sd.rxPending.body")}</span>
+                  {perms.can_edit && rxAllowed && mode !== "edit" && (
+                    <button type="button" className="btn-sm primary" onClick={() => { setEditRx(true); setMode("edit"); }}><Icon name="eye" size={14} /> {t("adm.sd.edit.rxAdd")}</button>
+                  )}
+                </div>
+              )}
               {mode === "edit" && (
                 <SaleEditForm
                   sale={s}
@@ -728,6 +742,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   rx={(rxDoc?.tickets || []).find((tk) => tk.rx)?.rx || null}
                   rxAllowed={rxAllowed}
                   startWithRx={editRx}
+                  rxMulti={lines.some((l) => l.lens && l.lens.category && l.lens.category !== "sv")}
                   busy={busy}
                   onSave={saveEdit}
                   onCancel={() => setMode(null)}
@@ -850,13 +865,29 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                       {s.payments.map((p, i) => (
                         <tr key={i}>
                           <td>{fmt(p.created_at, lang)}</td>
-                          <td>{methodLabel(p)}{p.reference && <><br /><small className="sd-muted">{t("adm.sd.pay.reference")}: {p.reference}</small></>}</td>
+                          <td>{methodLabel(p)}{p.reference && <><br /><small className="sd-muted">{t("adm.sd.pay.reference")}: {p.reference}</small></>}{p.corrected_at && <><br /><span className="adm-chip sd-corrected" title={fmt(p.corrected_at, lang)}>{t("adm.sd.payfix.corrected")}</span></>}</td>
                           <td>{t(`adm.pos.sales.pay.${p.kind}`)}</td>
                           <td className={`r ${p.kind === "refund" || p.amount < 0 ? "neg" : ""}`}><b>{m(p.amount)}</b></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                )}
+                {perms.can_edit && s.status !== "voided" && !fixPay && (
+                  <div className="sd-payfix-open adm-noprint">
+                    <button type="button" className="btn-sm" onClick={() => setFixPay(true)}><Icon name="edit" size={13} /> {t("adm.sd.payfix.open")}</button>
+                    <small className="sd-hint">{t("adm.sd.payfix.openHint")}</small>
+                  </div>
+                )}
+                {fixPay && (
+                  <PaymentCorrection
+                    sale={s}
+                    methods={ctx?.payment_methods || []}
+                    storeMethods={store?.payment_methods || null}
+                    storeLabel={store ? store.code : ""}
+                    onCancel={() => setFixPay(false)}
+                    onDone={(r) => { setFixPay(false); if (r?.sale) setData((d) => ({ ...d, sale: r.sale })); setTick((n) => n + 1); setOTick((n) => n + 1); onChanged?.(); }}
+                  />
                 )}
                 {data.insurance_claims?.length > 0 && (
                   <p className="sd-hint">{t("adm.sd.claims")}: {data.insurance_claims.map((c) => `${c.payer_name}: ${m(c.covered)} · ${t(`adm.pos.claims.status.${c.status}`)}`).join(" — ")}</p>
@@ -895,7 +926,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               </Section>
 
               <Section icon="printer" title={t("adm.sd.sec.documents")} right={doc ? (doc.print.count > 0 ? t("adm.sd.reprints", { n: doc.print.count }) : t("adm.sd.noReprints")) : null}>
-                <SaleDocuments saleId={s.id} compact printer={terminal?.printer ?? doc?.terminal?.printer ?? null} />
+                <SaleDocuments saleId={s.id} compact printer={terminal?.printer ?? doc?.terminal?.printer ?? null} rxPending={s.rx_pending === true} />
               </Section>
 
               <Section icon="history" title={t("adm.sd.sec.history")}>

@@ -132,7 +132,7 @@ function Part({ title, icon, onEdit, wide, children }) {
   );
 }
 
-export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, approval, delivery, notifyEmail, notifySms = false, receiptDetail, store, terminal, sellerCode, money, onEdit }) {
+export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, rxPending = false, approval, delivery, notifyEmail, notifySms = false, receiptDetail, store, terminal, sellerCode, money, onEdit }) {
   const { t, lang } = useLang();
   const name = [customer.first_name, customer.last_name].filter(Boolean).join(" ");
   const age = ageOf(customer.birth_date);
@@ -159,6 +159,8 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
                     <b>{own ? t("adm.pos.own.tag") : l.kind === "store_frame" ? t("adm.pos.store.tag") : l.title}</b>
                     <small>{[own || l.kind === "store_frame" ? l.description : l.variant_title, l.sku && `${t("adm.pos.sum.sku")} ${l.sku}`].filter(Boolean).join(" · ")}</small>
                     <small>{lensText(l.selection)}</small>
+                    {/* Fotocromático = marca con color: lo primero que se ve (dueño, 15-nov-2026). */}
+                    {l.selection?.photo_code && <span className="pos-photo-flag">{t("adm.pos.lens.photoOn")}</span>}
                     <small className="muted">
                       {[!own && `${t("adm.pos.sum.frame")} ${money(l.frame)}`, l.lenses > 0 && `${t("adm.pos.sum.lenses")} ${money(l.lenses)}`, l.tax_amount > 0 && `${t("adm.pos.price.tax")} ${money(l.tax_amount)}`].filter(Boolean).join(" · ")}
                     </small>
@@ -183,7 +185,7 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
         </Part>
 
         <Part title={t("adm.pos.step.rx")} icon="eye" onEdit={() => onEdit("rx")}>
-          {noRx || !eyeRows.length ? <p className="muted">{t("adm.pos.sum.noRx")}</p> : (
+          {rxPending ? <p className="pos-rx-pending-note"><b>{t("adm.pos.rx.pending")}</b> · {t("adm.pos.sum.rxPending")}</p> : noRx || !eyeRows.length ? <p className="muted">{t("adm.pos.sum.noRx")}</p> : (
             <>
               <table className="pos-sum-rx">
                 <thead><tr><th />{EYE_FIELDS.map((k) => <th key={k}>{t(`adm.pos.rx.${k}`)}</th>)}</tr></thead>

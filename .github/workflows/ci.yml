@@ -3,12 +3,13 @@ name: CI
 on:
   push:
     # develop serves the live store (Vercel) and develop_optical_storepos is staging:
-    # both must be checked before they deploy, not only main.
-    branches: [main, develop, develop_optical_storepos]
+    # both must be checked before they deploy, not only main. tenant-deploy is
+    # the line every new optician deploys from (docs/TENANT-DEPLOY-BRANCH.md).
+    branches: [main, develop, develop_optical_storepos, tenant-deploy]
   pull_request:
     # Also PRs into staging: a branch opened against develop_optical_storepos
     # must show its checks before it is merged, not after.
-    branches: [main, develop, develop_optical_storepos]
+    branches: [main, develop, develop_optical_storepos, tenant-deploy]
 
 jobs:
   check-config:

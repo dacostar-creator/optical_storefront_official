@@ -150,6 +150,8 @@ export interface SaleDocument {
     status: string;
     voided_at: string | null;
     delivery: string;
+    /** The prescription is not in yet (lib/rx-pending.ts): the lab ticket cannot be printed. */
+    rx_pending: boolean;
   };
   customer: { name: string; phone: string | null };
   tracking_url: string;
@@ -368,6 +370,7 @@ export async function buildSaleDocument(
       status: sale.status,
       voided_at: sale.voided_at,
       delivery: sale.delivery,
+      rx_pending: sale.rx_pending,
     },
     customer: { name, phone: order?.shipping_address?.phone ?? null },
     // The QR on the receipt opens the existing order tracking — no personal data in it.
@@ -441,6 +444,8 @@ export async function buildSaleDocument(
 export async function printSaleDocument(container: MedusaContainer, saleId: string, kind: DocumentKind, actorId: string | null): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
+  // A lab order without its prescription is how a wrong pair gets cut (lib/rx-pending.ts).
+  if (kind === "job" && sale.rx_pending) throw new PosError("rx_pending", 409);
   const before = await printCount(container, saleId, kind);
   await recordAudit(container, {
     actorId,

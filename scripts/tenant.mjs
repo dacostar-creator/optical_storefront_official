@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { text } from "./tenant/load.mjs";
-import { applyTenantRules, LEGACY_TENANTS, readManifests, routedApi, tenantProxyPath } from "./tenant/routing.mjs";
+import { applyTenantRules, LEGACY_TENANTS, readManifests, routedApi, TENANT_DEPLOY_BRANCH, tenantProxyPath } from "./tenant/routing.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TENANTS = join(ROOT, "tenants");
@@ -160,7 +160,7 @@ function backendEnv(m, withSecrets) {
 function storefrontEnv(m) {
   const lines = [`TENANT_FILE=tenants/${m.slug}/tenant.json`];
   lines.push(
-    "# From the new backend (Settings → Publishable API keys) and the owner's Stripe:",
+    "# From the new backend (TENANT_SEED_CONFIRM=yes npx medusa exec ./src/scripts/tenant-seed.js prints the key) and the owner's Stripe:",
     "# VITE_MEDUSA_PUBLISHABLE_KEY=   VITE_STRIPE_PUBLISHABLE_KEY=",
     "# Optional: VITE_GOOGLE_MAPS_KEY= (docs/GOOGLE-MAPS.md)"
   );
@@ -190,7 +190,7 @@ function checklist(m) {
     `   [ ] pnpm tenant validate ${m.slug}`,
     "2. Cuentas del dueño (claves propias, §17)",
     "   [ ] Stripe en modo live · dominio · Google (hoja) · Resend · Twilio (opcional) · Anthropic (lector de recetas)",
-    "3. Backend (Coolify, desde main)",
+    `3. Backend (Coolify, rama ${TENANT_DEPLOY_BRANCH})`,
     "   [ ] App nueva + Postgres + Redis",
     `   [ ] Variables: pnpm tenant env ${m.slug} --target backend --with-secrets`,
     `   [ ] Dominio de la API: ${api}`,
@@ -202,10 +202,12 @@ function checklist(m) {
     "6. Hoja de Google",
     "   [ ] Crear la hoja, compartirla con la cuenta de servicio → GSHEET_*",
     "7. Datos iniciales (terminal de Coolify)",
-    "   [ ] npx medusa exec ./src/scripts/seed.js   (región, canal de venta, clave publicable)",
+    "   [ ] npx medusa exec ./src/scripts/tenant-seed.js   (dry run: qué falta)",
+    "   [ ] TENANT_SEED_CONFIRM=yes npx medusa exec ./src/scripts/tenant-seed.js   (región, canal, clave publicable, almacén y envío; imprime el pk_ para Vercel)",
     "   [ ] npx medusa user -e <correo técnico> -p <contraseña>   (usuario técnico para montar la tienda)",
     "8. Storefront (Vercel)",
-    "   [ ] Proyecto nuevo, Root Directory = apps/capri-storefront, rama main",
+    `   [ ] Proyecto nuevo, Root Directory = apps/capri-storefront, rama de producción ${TENANT_DEPLOY_BRANCH}`,
+    `   [ ] TENANT_FILE=tenants/${m.slug}/tenant.json en el proyecto (sin ella el build de ${TENANT_DEPLOY_BRANCH} falla a propósito)`,
     `   [ ] Variables: pnpm tenant env ${m.slug} --target storefront`,
     `   [ ] Dominios: ${m.domains.storefront} y https://${apexOf(m.domains.storefront)}`,
     legacy

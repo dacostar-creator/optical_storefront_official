@@ -30,10 +30,21 @@ cd /app/apps/backend/.medusa/server
 # either: the status travels to `GET /version` ("migrations": "failed") and to
 # the panel's Security tab (lib/security.ts `db.migrations_applied`), instead of
 # being discovered through 500s on the routes that needed the new columns.
-if /app/apps/backend/node_modules/.bin/medusa db:migrate; then
+#
+# Bounded by MIGRATE_TIMEOUT_SECONDS (default 900): a migration that hangs (a
+# lock that never comes, a database that stops answering) used to keep the
+# server from ever starting, which only showed up as a mute 502 from the proxy.
+# busybox `timeout` kills it with SIGTERM: exit 143 (137 if it had to be SIGKILLed).
+MIGRATE_TIMEOUT_SECONDS="${MIGRATE_TIMEOUT_SECONDS:-900}"
+if timeout "$MIGRATE_TIMEOUT_SECONDS" /app/apps/backend/node_modules/.bin/medusa db:migrate; then
   export MEDUSA_MIGRATE_STATUS=ok
 else
-  echo "[deploy] db:migrate FAILED; starting anyway — GET /version reports migrations=failed. Run the migration by hand and redeploy." >&2
+  status=$?
+  if [ "$status" -eq 143 ] || [ "$status" -eq 137 ]; then
+    echo "[deploy] db:migrate TIMED OUT after ${MIGRATE_TIMEOUT_SECONDS}s; starting anyway — GET /version reports migrations=failed. Check pg_stat_activity / pg_locks, then redeploy." >&2
+  else
+    echo "[deploy] db:migrate FAILED (exit $status); starting anyway — GET /version reports migrations=failed. Run the migration by hand and redeploy." >&2
+  fi
   export MEDUSA_MIGRATE_STATUS=failed
 fi
 

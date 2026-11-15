@@ -548,6 +548,16 @@ async function insertPrescriptions(
   return { newId: (nw as { id: string }).id, wornId, rxNumber: number };
 }
 
+/**
+ * The NEW prescription of a sale whose prescription came later (lib/rx-pending.ts):
+ * the same row the till writes, with the next Rx number. Returns its id and number.
+ */
+export async function insertLatePrescription(container: MedusaContainer, customerId: string, rx: Prescription, rxDate: string | null): Promise<{ id: string; rxNumber: string }> {
+  const out = await insertPrescriptions(container, { new: { rx }, worn: null }, { new: { rx_date: rxDate, rx_date_approx: false, worn_source: null }, worn: null }, customerId);
+  if (!out.newId || !out.rxNumber) throw new PosError("save_failed", 500);
+  return { id: out.newId, rxNumber: out.rxNumber };
+}
+
 // ---------------------------------------------------------------------------
 // Catalog and quote
 // ---------------------------------------------------------------------------
@@ -1176,6 +1186,12 @@ export interface CreateSaleInput {
   notifyEmail: boolean;
   /** The patient asked for the stage notices by SMS too (the till's switch). */
   notifySms?: boolean;
+  /**
+   * The lenses are sold before the prescription exists (the patient goes to
+   * the exam and comes back): the sale, the order and its lens lines say so,
+   * and the lab ticket waits until the prescription is added from the sale.
+   */
+  rxPending?: boolean;
   idempotencyKey: string | null;
 }
 
@@ -1201,6 +1217,8 @@ export interface CreatedSale {
   frame_photo_failed?: boolean;
   /** True when this response is a replay of an earlier identical request. */
   replayed?: boolean;
+  /** Sold with the prescription pending (lib/rx-pending.ts): the lab ticket waits for it. */
+  rx_pending?: boolean;
 }
 
 /** Sales currently being recorded, by idempotency key (one process; the unique index covers the rest). */
@@ -1243,6 +1261,7 @@ async function replayOf(container: MedusaContainer, key: string): Promise<Create
     promised_on: (sale.promised_on as string | null) ?? null,
     optical_change: null,
     replayed: true,
+    rx_pending: sale.rx_pending === true,
   };
 }
 
@@ -1351,6 +1370,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     rx_number: rx.rxNumber,
     promised_on: promisedOn,
     optical_change: change,
+    rx_pending: (sale as unknown as { rx_pending?: boolean }).rx_pending === true,
     ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
 }
@@ -1444,6 +1464,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
         // Where the stage SMS goes (lib/order-stage-transition.ts reads `phone`), only when asked for.
         ...(input.notifySms === true ? { phone: customer.phone } : {}),
         delivery: input.delivery,
+        // The prescription comes later (lib/rx-pending.ts): the order board and the lab ticket wait for it.
+        ...(input.rxPending === true ? { rx_pending: true } : {}),
       },
       items: quote.lines.map((l, i) => {
         const withRx = l.selection.design_code !== "frame-only";
@@ -1453,6 +1475,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           lens_config: l.selection,
           // By id only: the Rx values (PHI) live in the prescription record.
           prescription_id: withRx ? rx.newId : null,
+          // A lens sold before its prescription: added later from the sale (lib/rx-pending.ts).
+          ...(withRx && input.rxPending === true && !rx.newId ? { rx_pending: true } : {}),
           list_price: l.list,
           discount_pct: quote.discount_pct,
           approved_by: approval?.decided_by ?? null,
@@ -1541,6 +1565,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     currency_code: "usd",
     // Only the private keys (the patient's frames): a store frame's photo is a public URL.
     own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
+    rx_pending: input.rxPending === true && withLenses && !rx.newId,
   });
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
 }
@@ -1669,7 +1694,14 @@ export interface SaleRow {
    */
   has_wearing_photo: boolean;
   wearing_photo_at: string | null;
-  payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
+  /** Lenses sold before the prescription exists; it is added from the sale (lib/rx-pending.ts). */
+  rx_pending: boolean;
+  /**
+   * The live payment rows. `id` and `details` are what the payment correction
+   * (lib/payment-correction.ts) sends back for a row it keeps; `corrected_at`
+   * marks a row that was corrected after it was taken.
+   */
+  payments: Array<{ id: string; method_code: string; amount: number; kind: string; reference: string | null; details: Record<string, unknown> | null; created_at: string; corrected_at: string | null }>;
   /**
    * Who the sale was for and what was sold, when the caller asked for it
    * (`listSales` with `withDetail`). Read from the source tables — the
@@ -1728,14 +1760,18 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     previous_numbers: Array.isArray(s.previous_numbers) ? (s.previous_numbers as SaleRow["previous_numbers"]) : [],
     has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
     wearing_photo_at: iso(s.wearing_photo_at),
+    rx_pending: s.rx_pending === true,
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({
+        id: String(p.id),
         method_code: String(p.method_code),
         amount: dollars(Number(p.amount_cents)),
         kind: String(p.kind ?? "deposit"),
         reference: (p.reference as string | null) ?? null,
+        details: p.details && typeof p.details === "object" ? (p.details as Record<string, unknown>) : null,
         created_at: new Date(p.created_at as string).toISOString(),
+        corrected_at: iso(p.corrected_at),
       })),
   };
 }

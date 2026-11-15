@@ -11,10 +11,21 @@ import { Migration } from "@mikro-orm/migrations";
  *    Op4): when exactly ONE active store has "online" in its name and no store
  *    is online yet, it becomes the online store. Any other case is left for
  *    Tiendas → Editar → Tipo, so a guess never picks between two candidates.
- * Idempotent. Sorted after CreateEstablishmentThemeColor5 by file name.
+ * Idempotent.
+ *
+ * Migrations run in ALPHABETICAL file-name order, not by the trailing number:
+ * this one ("Online6") runs BEFORE CreateEstablishmentReceiptNote2, which is
+ * what adds `kind`. On a database that already had every earlier migration
+ * that never mattered; on an empty one (a new optician) the CHECK below hit a
+ * column that did not exist yet and the whole module failed to migrate. So
+ * the column is created here first, with ReceiptNote2's own definition (minus
+ * its inline CHECK, which the constraint below replaces). ReceiptNote2 then
+ * finds the column and its `ADD COLUMN IF NOT EXISTS` skips it, constraint
+ * included, so the CHECK that allows 'online' stays.
  */
 export class CreateEstablishmentOnline6 extends Migration {
   async up(): Promise<void> {
+    this.addSql(`ALTER TABLE establishment ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'own';`);
     this.addSql(`ALTER TABLE establishment DROP CONSTRAINT IF EXISTS establishment_kind_check;`);
     this.addSql(`ALTER TABLE establishment ADD CONSTRAINT establishment_kind_check CHECK (kind IN ('own', 'family', 'partner', 'consignment', 'online'));`);
     this.addSql(`

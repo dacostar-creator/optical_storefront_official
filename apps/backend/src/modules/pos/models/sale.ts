@@ -78,4 +78,10 @@ export const PosSale = model.define("pos_sale", {
   wearing_photo_at: model.dateTime().nullable(),
   wearing_photo_by: model.text().nullable(),
   wearing_photo_consent_at: model.dateTime().nullable(),
+  /**
+   * Lenses sold before the prescription exists (owner, 15-nov-2026: the patient
+   * pays the deposit, goes to the exam and the prescription arrives hours
+   * later). Cleared when it is added from the sale (lib/rx-pending.ts).
+   */
+  rx_pending: model.boolean().default(false),
 });

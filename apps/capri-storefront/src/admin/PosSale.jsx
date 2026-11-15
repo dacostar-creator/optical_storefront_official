@@ -237,7 +237,7 @@ function LensPresets({ line, onChange, catalog, rxForm }) {
 }
 
 /** Diseño, material y tratamientos de una línea, con las mismas reglas que el asistente web. */
-function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
+function LensPicker({ line, onChange, catalog, rxForm, noRx, rxPending = false }) {
   const { t, lang } = useLang();
   const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
   const L = (o) => (o ? o[lang] ?? o.es : "");
@@ -250,7 +250,8 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   const ars = design && sel.design_code !== "frame-only" ? AR[arGroupFor(design)] || [] : [];
   const set = (patch) => onChange({ ...line, selection: { ...sel, ...patch } });
   // Filtro por tipo de receta: monofocal → solo visión sencilla; multifocal → bifocal o progresivo.
-  const designs = noRx ? [] : DESIGNS.filter((d) => (isMulti(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
+  // Con la graduación pendiente todavía no se sabe si es monofocal o multifocal: se ofrecen todos.
+  const designs = noRx ? [] : rxPending ? DESIGNS : DESIGNS.filter((d) => (isMulti(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
   // Stock o tallado digital: solo donde el diseño admite los dos (visión
   // sencilla y bifocal). Un acabado sin precio en la lista se ve pero no se
   // elige: el servidor lo rechazaría con `finish_unavailable`.
@@ -310,8 +311,9 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
               <span className="pos-picked" title={t("adm.pos.lens.finishProg")}>{t("adm.pos.lens.finish.digital")}</span>
             )}
           </label>
-          <label>
-            <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" /></span>
+          {/* Fotocromático elegido = recuadro con color (dueño, 15-nov-2026: «se me olvida si tiene foto»). */}
+          <label className={`pos-lens-photo ${sel.photo_code ? "on" : ""}`}>
+            <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" />{sel.photo_code && <b className="pos-photo-flag">{t("adm.pos.lens.photoOn")}</b>}</span>
             <select value={sel.photo_code || ""} onChange={(e) => set({ photo_code: e.target.value || null })}>
               <option value="">{t("adm.pos.lens.none")}</option>
               {photos.map((p) => <option key={p.id} value={p.id}>{L(p.label)} · {p.colors.map((c) => PHOTO_COLORS[c]?.[lang] || c).join("/")}</option>)}
@@ -344,6 +346,9 @@ export default function PosSale({ me }) {
   const catalog = useAdminLensCatalog(storeId, { enabled: Boolean(storeId) });
   const [terminalId, setTerminalId] = useState("");
   const [step, setStep] = useState(0);
+  // El paso más lejano al que se llegó en esta venta: hasta ahí se puede saltar con los botones de pasos.
+  const [maxStep, setMaxStep] = useState(0);
+  useEffect(() => { if (STEPS[step] !== "done") setMaxStep((m) => Math.max(m, step)); }, [step]);
   const rootRef = useRef(null);
   useKeyboardInset(rootRef);
   // Cada paso empieza arriba: en la tablet el botón Siguiente queda al final de un formulario largo.
@@ -383,6 +388,9 @@ export default function PosSale({ me }) {
   const viewFrame = (p) => { const full = frameCardOf(p.product_id); if (full) setCardProduct(full); };
   // 3 · receta
   const [noRx, setNoRx] = useState(false);
+  // «Graduación pendiente» (dueño, 15-nov-2026): el paciente paga, va al examen y la receta llega horas después;
+  // la venta se termina igual y la receta se agrega desde la venta (backend lib/rx-pending.ts).
+  const [rxPending, setRxPending] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
   const [ocr, setOcr] = useState({ status: "idle", confirmed: true });
   const [rxWorn, setRxWorn] = useState(EMPTY_RX);
@@ -566,7 +574,8 @@ export default function PosSale({ me }) {
       if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } };
       const multi = isMulti(rxNew);
       const d = l.selection.design_code;
-      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
+      // Sin graduación todavía, cualquier diseño vale (lo decide lo que el paciente compra).
+      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (rxPending || (multi ? x.cat !== "sv" : x.cat === "sv")));
       if (fits && !(l.kind !== "own_frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
       const first = catalog.DESIGNS.find((x) => (multi ? x.cat === "prog" : x.cat === "sv"));
       const power = maxPower(rxNew);
@@ -588,22 +597,24 @@ export default function PosSale({ me }) {
     } : null,
   } : null);
   // Leída de la foto → `ocr` y verificada solo si el vendedor confirmó la lectura.
-  const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
+  const newBody = () => (noRx || rxPending ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
 
   // Cotización en curso: se pide al servidor desde que hay montura (paso
   // Montura) y cada vez que cambia algo que afecta al precio, con una espera
   // corta. La receta viaja desde Lentes (ya cerrada), que es lo que decide
   // `rx_check` y el cambio óptico en Precio. El cuerpo serializado es la
   // dependencia: dos renders con la misma venta no vuelven a preguntar.
-  const withRx = step >= RX_FROM && !noRx && rxFilled(rxNew);
+  // Lo más lejos que se llegó: al volver a un paso anterior (saltos entre pasos) la cotización sigue viva.
+  const reached = Math.max(step, maxStep);
+  const withRx = reached >= RX_FROM && !noRx && !rxPending && rxFilled(rxNew);
   // Una línea con lente pero sin material (la montura del cliente antes de
   // Lentes, o el material quitado) no tiene precio posible: no se pregunta.
   const quotable = lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code);
-  const quoteBody = useMemo(() => (store && lines.length && quotable && step >= QUOTE_FROM && STEPS[step] !== "done"
+  const quoteBody = useMemo(() => (store && lines.length && quotable && reached >= QUOTE_FROM && STEPS[step] !== "done"
     ? JSON.stringify({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
     : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store?.id, lines, discount, quotable && step >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
+    [store?.id, lines, discount, quotable && reached >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
   useEffect(() => {
     if (!quoteBody) { quoteSeq.current += 1; setQ(null); setQStatus("idle"); return undefined; }
     const seq = ++quoteSeq.current;
@@ -683,17 +694,19 @@ export default function PosSale({ me }) {
   const requireEmail = store?.kind === "online";
   const hasEmail = Boolean(customer.email.trim());
   const custProblems = customerProblems(customer, { requireAddress: delivery === "ship", requireEmail });
-  const canNext = () => {
-    switch (STEPS[step]) {
+  const canNext = () => canPass(STEPS[step]);
+  function canPass(name) {
+    switch (name) {
       case "customer": return Object.keys(customerProblems(customer, { requireEmail })).length === 0 && wears !== null
         && (!wears || wornReady);
       case "frame": return lines.length > 0;
       case "rx":
+        if (rxPending) return true;
         if (noRx) return !lines.some((l) => l.kind === "own_frame");
         if (!rxFilled(rxNew) || !rxCheck.ok || (ocr.status === "done" && !ocr.confirmed)) return false;
         return true;
       case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
-        && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
+        && (rxPending || !lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
       case "price": return Boolean(q) && qStatus !== "error" && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
       case "payment": return payState.balance >= 0
         && (total <= 0 || payState.paid + payState.ins > 0)
@@ -701,6 +714,17 @@ export default function PosSale({ me }) {
         && (delivery === "pickup" || Object.keys(custProblems).length === 0);
       default: return false;
     }
+  }
+
+  // Saltar entre pasos ya visitados (dueño, 15-nov-2026: «que tú puedas saltarte de ventana en ventana»):
+  // hacia atrás siempre; hacia delante hasta el más lejano al que se llegó, y si algo de en medio
+  // dejó de estar completo, se para ahí para que no se pierda.
+  const jumpTo = (i) => {
+    if (i <= step) { setStep(i); return; }
+    for (let k = step; k < i; k += 1) {
+      if (!canPass(STEPS[k])) { setStep(k); if (k !== step) toast({ tone: "warning", title: t("adm.pos.steps.incomplete", { step: t(`adm.pos.step.${STEPS[k]}`) }) }); return; }
+    }
+    setStep(i);
   };
 
   // Bloqueado en el primer paso: en vez de un botón mudo, marca qué falta y lleva hasta ahí.
@@ -742,6 +766,7 @@ export default function PosSale({ me }) {
         notify_sms: notifySms,
         receipt_detail: notifyEmail && hasEmail && receiptDetail,
         idempotency_key: idem.current,
+        rx_pending: rxPending && !noRx,
       });
       // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
       // servidor no pudo guardarlas, el recibo de ahora las imprime igual.
@@ -761,8 +786,8 @@ export default function PosSale({ me }) {
 
   const reset = () => {
     idem.current = null;
-    setStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
-    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
+    setStep(0); setMaxStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
+    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxPending(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
@@ -808,8 +833,8 @@ export default function PosSale({ me }) {
         <div className="pos-sticky">
           <ol className="pos-steps" aria-label={t("adm.pos.steps.label")} style={{ "--pos-steps": STEPS.length - 1 }}>
             {STEPS.slice(0, -1).map((s, i) => (
-              <li key={s} className={i === step ? "on" : i < step ? "ok" : ""}>
-                <button type="button" className="pos-step-btn" disabled={i > step} onClick={() => setStep(i)} aria-current={i === step ? "step" : undefined}
+              <li key={s} className={i === step ? "on" : i < step || (i <= maxStep && canPass(s)) ? "ok" : i <= maxStep ? "todo" : ""}>
+                <button type="button" className="pos-step-btn" disabled={i > maxStep || busy} onClick={() => jumpTo(i)} aria-current={i === step ? "step" : undefined}
                   aria-label={`${t("adm.pos.steps.of", { n: i + 1, total: STEPS.length - 1 })}: ${t(`adm.pos.step.${s}`)}`}>
                   <span className="pos-step-n" aria-hidden="true">{i < step ? <Icon name="check" size={13} /> : i + 1}</span>
                   <span className="pos-step-txt">{t(`adm.pos.step.${s}`)}</span>
@@ -997,11 +1022,18 @@ export default function PosSale({ me }) {
         {stepName === "rx" && (
           <>
             {frameCards}
-            <label className="pos-check">
-              <input type="checkbox" checked={noRx} onChange={(e) => setNoRx(e.target.checked)} /> {t("adm.pos.rx.none")}
-            </label>
+            <div className="pos-rx-choices">
+              <label className={`pos-check pos-rx-pending ${rxPending ? "on" : ""}`}>
+                <input type="checkbox" checked={rxPending} onChange={(e) => { setRxPending(e.target.checked); if (e.target.checked) setNoRx(false); }} />
+                <span><b>{t("adm.pos.rx.pending")}</b><small>{t("adm.pos.rx.pendingHint")}</small></span>
+              </label>
+              <label className="pos-check">
+                <input type="checkbox" checked={noRx} onChange={(e) => { setNoRx(e.target.checked); if (e.target.checked) setRxPending(false); }} /> {t("adm.pos.rx.none")}
+              </label>
+            </div>
             {noRx && lines.some((l) => l.kind === "own_frame") && <div className="adm-demo-banner">{t("adm.err.pos.own_frame_needs_lenses")}</div>}
-            {!noRx && (
+            {rxPending && <p className="pos-rx-pending-note" role="note"><Icon name="clock" size={14} /> {t("adm.pos.rx.pendingNote")}</p>}
+            {!noRx && !rxPending && (
               <div className="pos-rx-layout">
                 {/* Apaisada: la receta a la izquierda y la foto (con su vista previa) a la derecha; vertical: la foto primero. */}
                 <aside className="pos-rx-aside">
@@ -1047,10 +1079,10 @@ export default function PosSale({ me }) {
                   <b>{l.kind === "frame" ? `${l.title} · ${l.variant_title || ""}` : `${t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")} · ${l.title || l.description}`}</b>
                 </div>
                 {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
-                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
+                <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} rxPending={rxPending} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
-            {!noRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
+            {!noRx && !rxPending && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
           {!catalog.live && <small className="muted pos-lens-offline" title={t("adm.pos.lens.offlineListHint")}>{t("adm.pos.lens.offlineList")}</small>}
           </>
@@ -1107,7 +1139,7 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
-            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} rxPending={rxPending} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
@@ -1201,7 +1233,7 @@ export default function PosSale({ me }) {
               </p>
             )}
             <OpticalChange change={result.optical_change} />
-            <SaleDocuments saleId={result.id} printer={terminal?.printer} localPhotos={result.frame_photos} />
+            <SaleDocuments saleId={result.id} printer={terminal?.printer} localPhotos={result.frame_photos} rxPending={result.rx_pending === true} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>
           </div>
         )}

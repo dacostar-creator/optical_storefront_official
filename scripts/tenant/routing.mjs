@@ -25,6 +25,25 @@ const RESERVED_TLD = /\.(example|test|invalid|localhost)$/i;
 
 export const tenantProxyPath = (slug) => `/medusa-t-${slug}`;
 
+/**
+ * The branch every NEW optician deploys from (docs/TENANT-DEPLOY-BRANCH.md):
+ * its Coolify backend and its Vercel project both point here. A build of this
+ * branch must name its optician (TENANT_FILE); falling back to another store's
+ * manifest or backend would publish the wrong store under the client's domain.
+ */
+export const TENANT_DEPLOY_BRANCH = "tenant-deploy";
+
+/** Throws when a build of the tenant branch does not name a new optician. */
+export function assertTenantDeployBuild(env, manifest) {
+  if ((env.VERCEL_GIT_COMMIT_REF ?? "") !== TENANT_DEPLOY_BRANCH) return;
+  if (!manifest) {
+    throw new Error(`tenant: the ${TENANT_DEPLOY_BRANCH} branch needs TENANT_FILE=tenants/<slug>/tenant.json in the Vercel project`);
+  }
+  if (LEGACY_TENANTS.has(manifest.slug)) {
+    throw new Error(`tenant: "${manifest.slug}" does not deploy from ${TENANT_DEPLOY_BRANCH} (only new opticians do)`);
+  }
+}
+
 /** The `domains.api` origin a manifest routes to, or null when it gets no rewrite. */
 export function routedApi(manifest) {
   if (!manifest || LEGACY_TENANTS.has(manifest.slug)) return null;
