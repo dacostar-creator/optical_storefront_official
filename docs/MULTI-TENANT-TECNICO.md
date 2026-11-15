@@ -485,7 +485,7 @@ Cloudflare (R2, DNS), Vercel, Stripe (`webhook_endpoints.create`) y Resend
 4. R2: buckets `<slug>-assets` (público) y `<slug>-rx` (privado); Resend: dominio verificado.
 5. Stripe: webhook a `https://api.<dominio>/hooks/payment/stripe_stripe` → `STRIPE_WEBHOOK_SECRET`.
 6. Hoja: crear y compartir con la cuenta de servicio → `GSHEET_*`.
-7. `medusa exec ./src/scripts/seed.js` (región, canal, clave publicable) y `npx medusa user` para el usuario técnico.
+7. `TENANT_SEED_CONFIRM=yes npx medusa exec ./src/scripts/tenant-seed.js` (región, canal, clave publicable enlazada, almacén y opción de envío; imprime el `pk_` para Vercel; sin la variable solo informa) y `npx medusa user` para el usuario técnico. `seed.js` NO crea nada de eso: solo carga las opciones de lentes antiguas.
 8. Vercel: proyecto con Root Directory `apps/capri-storefront`, `TENANT_FILE`, `VITE_MEDUSA_PUBLISHABLE_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`; dominio `www.<dominio>`. `pnpm tenant vercel` añade su reescritura `/medusa-t-<slug>` a `vercel.json` (commit y PR).
 9. Catálogo: si el proveedor ya está en uso, importar el catálogo base compartido (§8.1); si es nuevo, `python -m scraper sync --full` con su adaptador. Después `pnpm reindex`.
 10. Verificación: Seguridad en verde, compra real + reembolso, correo y SMS recibidos, fila en la hoja, cambio de estado desde la hoja.
