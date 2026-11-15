@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { text } from "./tenant/load.mjs";
-import { applyTenantRules, LEGACY_TENANTS, readManifests, routedApi, tenantProxyPath } from "./tenant/routing.mjs";
+import { applyTenantRules, LEGACY_TENANTS, readManifests, routedApi, TENANT_DEPLOY_BRANCH, tenantProxyPath } from "./tenant/routing.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TENANTS = join(ROOT, "tenants");
@@ -190,7 +190,7 @@ function checklist(m) {
     `   [ ] pnpm tenant validate ${m.slug}`,
     "2. Cuentas del dueño (claves propias, §17)",
     "   [ ] Stripe en modo live · dominio · Google (hoja) · Resend · Twilio (opcional) · Anthropic (lector de recetas)",
-    "3. Backend (Coolify, desde main)",
+    `3. Backend (Coolify, rama ${TENANT_DEPLOY_BRANCH})`,
     "   [ ] App nueva + Postgres + Redis",
     `   [ ] Variables: pnpm tenant env ${m.slug} --target backend --with-secrets`,
     `   [ ] Dominio de la API: ${api}`,
@@ -205,7 +205,8 @@ function checklist(m) {
     "   [ ] npx medusa exec ./src/scripts/seed.js   (región, canal de venta, clave publicable)",
     "   [ ] npx medusa user -e <correo técnico> -p <contraseña>   (usuario técnico para montar la tienda)",
     "8. Storefront (Vercel)",
-    "   [ ] Proyecto nuevo, Root Directory = apps/capri-storefront, rama main",
+    `   [ ] Proyecto nuevo, Root Directory = apps/capri-storefront, rama de producción ${TENANT_DEPLOY_BRANCH}`,
+    `   [ ] TENANT_FILE=tenants/${m.slug}/tenant.json en el proyecto (sin ella el build de ${TENANT_DEPLOY_BRANCH} falla a propósito)`,
     `   [ ] Variables: pnpm tenant env ${m.slug} --target storefront`,
     `   [ ] Dominios: ${m.domains.storefront} y https://${apexOf(m.domains.storefront)}`,
     legacy

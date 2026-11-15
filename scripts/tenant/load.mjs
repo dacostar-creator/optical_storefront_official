@@ -17,7 +17,7 @@
 import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { brandVars } from "../../apps/capri-storefront/src/config/brandVars.js";
-import { routedApi } from "./routing.mjs";
+import { assertTenantDeployBuild, routedApi } from "./routing.mjs";
 
 /** Same rule as PRODUCTION_BRANCHES in apps/capri-storefront/backend-target.mjs. */
 const LIVE_BRANCHES = new Set(["develop", "main"]);
@@ -27,6 +27,8 @@ export const DEFAULT_TENANT_FILE = "tenants/el-rancho/tenant.json";
 /** The manifest path for this build, before resolving it against the repo root. */
 export function tenantFileFor(env = process.env) {
   if (env.TENANT_FILE && String(env.TENANT_FILE).trim()) return String(env.TENANT_FILE).trim();
+  // The tenant branch never falls back to El Rancho / RUBI LENS.
+  assertTenantDeployBuild(env, null);
   const live = LIVE_BRANCHES.has(env.VERCEL_GIT_COMMIT_REF ?? "") || env.VERCEL_ENV === "production";
   return live ? LIVE_TENANT_FILE : DEFAULT_TENANT_FILE;
 }

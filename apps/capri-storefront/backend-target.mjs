@@ -23,7 +23,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { LEGACY_TENANTS, routedApi, tenantProxyPath } from "../../scripts/tenant/routing.mjs";
+import { assertTenantDeployBuild, LEGACY_TENANTS, routedApi, tenantProxyPath } from "../../scripts/tenant/routing.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -43,6 +43,7 @@ export const PROXY_PATHS = { production: "/medusa", staging: "/medusa-staging" }
 
 /** @returns {{ target: "production" | "staging" | "tenant", proxy: string }} */
 export function resolveBackend(env, manifest = tenantManifestOf(env)) {
+  assertTenantDeployBuild(env, manifest);
   if (manifest && !LEGACY_TENANTS.has(manifest.slug)) {
     if (!routedApi(manifest)) throw new Error(`backend-target: tenant "${manifest.slug}" needs an https domains.api (and \`pnpm tenant vercel\`)`);
     return { target: "tenant", proxy: tenantProxyPath(manifest.slug) };
