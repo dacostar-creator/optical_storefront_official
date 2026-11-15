@@ -68,6 +68,9 @@ export const deliverSale = (id, payments = null) => call(`/admin/pos/sales/${enc
 export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
 // After the sale (backend lib/pos-sale-admin.ts): correct the details (the seller who made it or someone above them),
 // and — owner and superadmin only — hide it, bring it back, or move it to another store (new number there).
+// Corregir los pagos de una venta (backend lib/payment-correction.ts): la lista COMO DEBE QUEDAR
+// (filas con `id` se conservan o cambian, sin `id` se añaden, la que falta se quita), con motivo.
+export const correctPayments = (id, body) => call(`/admin/pos/sales/${encodeURIComponent(id)}/payments/correct`, { method: "POST", body }).then(after(SALE_READS));
 export const updateSale = (id, patch) => call(`/admin/pos/sales/${encodeURIComponent(id)}`, { method: "POST", body: patch }).then(after(SALE_READS));
 export const deleteSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/delete`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
 export const restoreSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/restore`, { method: "POST", body: {} }).then(after(SALE_READS));

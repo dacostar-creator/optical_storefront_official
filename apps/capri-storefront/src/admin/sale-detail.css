@@ -236,3 +236,48 @@
 .sd-sfphoto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 2px; }
 .sd-sfphoto-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; }
 .sd-sfphoto-pick .pos-cap { width: 100%; }
+
+/* «Graduación pendiente» (backend lib/rx-pending.ts): aviso con el botón para agregarla. */
+.sd-rx-pending { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.sd-rx-pending .btn-sm { flex: none; }
+.sd-corrected { font-size: 10.5px; padding: 0 7px; margin-top: 3px; }
+
+/* Corregir los pagos (PaymentCorrection.jsx). */
+.sd-payfix-open { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 8px; }
+.sd-payfix { border: 1px solid var(--adm-gold-line, var(--adm-line)); background: var(--adm-surface-2); border-radius: var(--adm-radius-sm); padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.sd-payfix-rows { display: grid; gap: 8px; }
+.sd-payfix-row { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface); min-width: 0; }
+.sd-payfix-row.is-changed { border-color: var(--adm-amber, #d98a0b); background: var(--adm-amber-soft); }
+.sd-payfix-row.is-new { border-color: var(--adm-green, #16a34a); }
+.sd-payfix-row.is-removed { opacity: .75; border-style: dashed; }
+.sd-payfix-row.is-removed .sd-payfix-main > span { text-decoration: line-through; }
+.sd-payfix-row.is-fixed { opacity: .8; }
+.sd-payfix-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.sd-payfix-row.is-removed .sd-payfix-main, .sd-payfix-row.is-fixed .sd-payfix-main { grid-template-columns: minmax(0, 1fr) auto; }
+.sd-payfix-main select, .sd-payfix-main input, .sd-payfix-refs input { min-width: 0; width: 100%; height: 38px; font-size: 14px; }
+.sd-payfix-main input { text-align: right; font-variant-numeric: tabular-nums; }
+.sd-payfix-refs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.sd-payfix-tag { font-size: 11.5px; color: var(--adm-muted); }
+.sd-payfix-row.is-changed .sd-payfix-tag { color: var(--adm-amber-dark, #a1640a); font-weight: 600; }
+.sd-payfix-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sd-payfix-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 0; }
+.sd-payfix-sum > div { border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 6px 9px; background: var(--adm-surface); min-width: 0; }
+.sd-payfix-sum dt { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--adm-muted); }
+.sd-payfix-sum dd { margin: 2px 0 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.sd-payfix-sum .ok dd { color: var(--adm-green-dark, #15803d); }
+.sd-payfix-sum .warn dd { color: var(--adm-amber-dark, #a1640a); }
+.sd-payfix-sum .bad dd { color: var(--adm-red-dark, #b42318); }
+.sd-payfix-sum .cash { grid-column: 1 / -1; }
+.sd-payfix-sum .cash dd { font-size: 13px; }
+.sd-payfix-err { margin: 0; color: var(--adm-red-dark, #b42318); font-size: 13px; font-weight: 600; }
+.sd-payfix-reason { display: grid; gap: 6px; }
+.sd-payfix-label { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--adm-muted); }
+.sd-payfix-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sd-chip { border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-ink); border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 34px; }
+.sd-chip.on { background: var(--adm-ink); color: var(--adm-surface); border-color: var(--adm-ink); }
+.sd-payfix-reason textarea { width: 100%; min-width: 0; font: inherit; font-size: 13px; }
+html.adm-touch .sd-chip { min-height: 44px; }
+html.adm-touch .sd-payfix-main select, html.adm-touch .sd-payfix-main input, html.adm-touch .sd-payfix-refs input { height: 44px; }
+@media (max-width: 480px) {
+  .sd-payfix-main { grid-template-columns: minmax(0, 1fr) minmax(0, 7.5rem) auto; }
+}

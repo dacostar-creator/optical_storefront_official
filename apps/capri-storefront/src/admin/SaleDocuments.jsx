@@ -80,6 +80,8 @@ export function photoBox(line, px, alt = "") {
 export const PRINT_CSS = `
   *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
   .job{width:100%;max-width:7.6in;margin:0 auto;padding:.25in;page-break-after:always}
+  .kv tr.hl-photo td{background:#ffd84d!important;color:#111;border-color:#c99a00;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .kv tr.hl-photo td:first-child{font-weight:800}
   .job:last-child{page-break-after:auto}
   .jh{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:6px}
   .jh b{font-size:16px} .jh small{display:block;color:#333}
@@ -192,7 +194,8 @@ export function jobHtml(doc, copyKey = null) {
         <h4>${esc(t("adm.doc.job.lens"))}</h4><table class="kv"><tbody>
           <tr><td>${esc(t("adm.doc.job.material"))}</td><td>${esc(bi(l.lens?.material, lang) || "—")}</td></tr>
           <tr><td>${esc(t("adm.doc.job.style"))}</td><td>${esc(bi(l.lens?.design, lang) || "—")}</td></tr>
-          <tr><td>${esc(t("adm.doc.job.intrinsic"))}</td><td>${esc(bi(l.lens?.photo, lang) || "—")}</td></tr>
+          ${/* Fotocromático = recuadro con color para que salte a la vista; en blanco cuando no lleva (dueño, 15-nov-2026). */ ""}
+          <tr class="${l.lens?.photo ? "hl-photo" : ""}"><td>${esc(t("adm.doc.job.intrinsic"))}</td><td>${l.lens?.photo ? `<b>${esc(bi(l.lens.photo, lang))}</b>` : "—"}</td></tr>
           <tr><td>${esc(t("adm.doc.job.coating"))}</td><td>${esc(bi(l.lens?.ar, lang) || "—")}</td></tr>
         </tbody></table></div>
         <div><h4>${esc(t("adm.doc.job.frame"))}</h4>
@@ -458,7 +461,7 @@ function withLocalPhotos(doc, localPhotos) {
   };
 }
 
-export default function SaleDocuments({ saleId, compact = false, printer = null, localPhotos = null }) {
+export default function SaleDocuments({ saleId, compact = false, printer = null, localPhotos = null, rxPending = false }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const [busy, setBusy] = useState("");
@@ -503,12 +506,14 @@ export default function SaleDocuments({ saleId, compact = false, printer = null,
 
   return (
     <div className={`pos-docs ${compact ? "compact" : ""}`}>
-      <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print("job")}><Icon name="printer" size={14} /> {busy === "job" ? "…" : t("adm.doc.printJob")}</button>
+      {/* Sin graduación la orden de laboratorio no sale (backend lib/rx-pending.ts): se dice por qué. */}
+      <button type="button" className="btn-sm" disabled={Boolean(busy) || rxPending} title={rxPending ? t("adm.doc.jobRxPending") : undefined} onClick={() => print("job")}><Icon name="printer" size={14} /> {busy === "job" ? "…" : t("adm.doc.printJob")}</button>
       {receiptButtons.map(([kind, label]) => (
         <button key={kind} type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print(kind)}><Icon name="receipt" size={14} /> {busy === kind ? "…" : t(label)}</button>
       ))}
       <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={send}><Icon name="mail" size={14} /> {busy === "email" ? "…" : t("adm.doc.emailReceipt")}</button>
       <label className="pos-check" title={t("adm.pos.pay.notifyDetailOn")}><input type="checkbox" checked={emailDetail} disabled={Boolean(busy)} onChange={(e) => setEmailDetail(e.target.checked)} /> {t("adm.doc.emailDetail")}</label>
+      {rxPending && <small className="pos-docs-note">{t("adm.doc.jobRxPending")}</small>}
       {photo && <a className="btn-sm" href={photo} target="_blank" rel="noreferrer"><Icon name="camera" size={14} /> {t("adm.doc.ownPhoto")}</a>}
     </div>
   );
