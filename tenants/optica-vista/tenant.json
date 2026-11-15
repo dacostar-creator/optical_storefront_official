@@ -28,9 +28,9 @@
     }
   },
   "domains": {
-    "storefront": "https://www.opticavistamiami.com",
-    "api": "https://api.opticavistamiami.com",
-    "emailFrom": "pedidos@opticavistamiami.com"
+    "storefront": "https://www.opticavista.com",
+    "api": "https://api.opticavista.com",
+    "emailFrom": "pedidos@opticavista.com"
   },
   "locale": {
     "default": "es",
@@ -57,6 +57,6 @@
     "imageCredit": "caprioptics.com"
   },
   "owner": {
-    "email": "dueno@opticavistamiami.com"
+    "email": "dueno@opticavista.com"
   }
 }
