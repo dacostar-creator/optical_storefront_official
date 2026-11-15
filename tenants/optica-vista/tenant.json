@@ -28,9 +28,9 @@
     }
   },
   "domains": {
-    "storefront": "https://www.opticavista.com",
-    "api": "https://api.opticavista.com",
-    "emailFrom": "pedidos@opticavista.com"
+    "storefront": "https://optica-vista.vercel.app",
+    "api": "https://api.d3e.llc",
+    "emailFrom": "opticavista@d3e.llc"
   },
   "locale": {
     "default": "es",

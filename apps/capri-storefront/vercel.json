@@ -15,7 +15,7 @@
     },
     {
       "source": "/medusa-t-optica-vista/:path*",
-      "destination": "https://api.opticavista.com/:path*"
+      "destination": "https://api.d3e.llc/:path*"
     },
     {
       "source": "/(.*)",
