@@ -288,6 +288,25 @@ escribir —o no escribir— la línea del libro, así que es con la que tiene q
 cuadrar el conteo. Si el dueño destilda "cuenta como efectivo" en Zelle hoy, el
 dinero que ayer entró al cajón sigue estando en el cajón.
 
+### Corrección de pagos (`lib/payment-correction.ts`, 15-nov-2026)
+
+Un pago mal anotado se corrige en su fila (importe, método, referencia), se
+borra (suave) o se añade el que faltó. El libro de caja nunca se reescribe:
+
+```
+diferencia de efectivo (por tienda) = Σ efectivo de los pagos después − Σ antes
+                                      (por la tienda donde entró cada pago)
+si ≠ 0 → UNA línea cash_movement en la caja ABIERTA de esa tienda:
+         kind in/out, category "correction", note = número de venta, sale_id
+```
+
+Una caja cerrada conserva el conteo firmado; la corrección aparece en la caja
+de hoy. La fila corregida conserva su `created_at` (el día en que entró el
+dinero: informe de caja y comisiones de ese mes) y toma la comisión del
+método actual (`paymentFee`) solo si cambió; `paid_cents`/`balance_cents` de
+la venta se recalculan y nunca superan total − seguro. El seguro y los
+reembolsos no se corrigen aquí.
+
 ### Informe de caja (`buildCashReport`)
 
 | Campo | Fórmula |

@@ -54,3 +54,20 @@
 .pos-dup > span:first-of-type { display: flex; flex-direction: column; gap: 1px; flex: 1 1 220px; min-width: 0; font-weight: 700; }
 .pos-dup > span:first-of-type small { font-weight: 500; }
 .pos-dup-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+
+/* «Graduación pendiente» (dueño, 15-nov-2026): la venta se termina y la receta se agrega después. */
+.pos-rx-choices { display: grid; gap: 8px; }
+.pos-check.pos-rx-pending { align-items: flex-start; padding: 10px 12px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface); }
+.pos-check.pos-rx-pending span { display: grid; gap: 2px; }
+.pos-check.pos-rx-pending small { color: var(--adm-muted); font-weight: 400; font-size: 12.5px; }
+.pos-check.pos-rx-pending.on { border-color: var(--adm-amber, #d98a0b); background: var(--adm-amber-soft); }
+.pos-rx-pending-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: var(--adm-radius-sm); background: var(--adm-amber-soft); color: var(--adm-amber-dark, #a1640a); font-size: 13px; }
+
+/* Fotocromático elegido: recuadro con color para que salte a la vista (dueño, 15-nov-2026). */
+.pos-lens label.pos-lens-photo.on { background: #ffd84d; border-radius: var(--adm-radius-sm); padding: 6px 8px; box-shadow: inset 0 0 0 1px #c99a00; color: #111; }
+.pos-lens label.pos-lens-photo.on select { border-color: #c99a00; }
+.pos-photo-flag { display: inline-flex; align-items: center; margin-left: 6px; padding: 0 7px; border-radius: 999px; background: #ffd84d; color: #111; box-shadow: inset 0 0 0 1px #c99a00; font-size: 10.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.pos-docs-note { flex-basis: 100%; color: var(--adm-amber-dark, #a1640a); font-size: 12px; }
+
+/* Pasos ya visitados a los que se puede volver o saltar; «todo» = visitado pero ahora incompleto. */
+.pos-steps li.todo .pos-step-n { background: var(--adm-amber-soft); border-color: var(--adm-amber, #d98a0b); color: var(--adm-amber-dark, #a1640a); }

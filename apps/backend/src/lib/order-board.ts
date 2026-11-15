@@ -342,6 +342,8 @@ function projectItem(item: RawItem) {
     fulfilled_quantity: num(detail.fulfilled_quantity),
     shipped_quantity: num(detail.shipped_quantity),
     has_prescription: Boolean(item.metadata?.["prescription_id"]),
+    // Sold before the exam: the prescription is added from the sale (lib/rx-pending.ts).
+    rx_pending: item.metadata?.["rx_pending"] === true,
     // The id, never the values. The owner opens the document through
     // `/admin/prescriptions/:id`, which serves a presigned URL.
     prescription_id: (item.metadata?.["prescription_id"] as string) ?? null,
@@ -632,7 +634,9 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     })),
 
     cancelable: cancel.cancelable,
-    next_stages: availableTransitions({ fulfillments, items: rawItems }, progress),
+    // Sold before its prescription (lib/rx-pending.ts): nothing moves forward until it is added from the sale.
+    next_stages: metadata["rx_pending"] === true ? availableTransitions({ fulfillments, items: rawItems }, progress).filter((st) => st === "confirmed") : availableTransitions({ fulfillments, items: rawItems }, progress),
+    rx_pending: metadata["rx_pending"] === true,
 
     items: rawItems.map(projectItem),
     // Only filled by fetchBoardOrder(..., { withPayments: true }).

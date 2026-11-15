@@ -31,7 +31,9 @@ export type StageErrorReason =
   | "no_location"
   | "nothing_to_fulfill"
   | "nothing_to_ship"
-  | "nothing_to_deliver";
+  | "nothing_to_deliver"
+  // A till sale whose prescription is still pending (lib/rx-pending.ts).
+  | "rx_pending";
 
 export interface StageTransitionInput {
   stage: string | undefined;
@@ -415,6 +417,16 @@ async function markDelivered(
  * Mueve el pedido a `input.stage`. Lanza `StageError` (con `status` y `reason`)
  * cuando el cambio no procede; cualquier otro error es un fallo real.
  */
+/** The order was sold with its prescription pending (lib/rx-pending.ts). Never throws: unknown = not pending. */
+async function rxPendingOf(container: MedusaContainer, orderId: string): Promise<boolean> {
+  try {
+    const { data } = await container.resolve(ContainerRegistrationKeys.QUERY).graph({ entity: "order", fields: ["id", "metadata"], filters: { id: orderId } });
+    return (data[0] as { metadata?: Record<string, unknown> | null } | undefined)?.metadata?.rx_pending === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function transitionOrderStage(
   container: MedusaContainer,
   orderId: string,
@@ -436,6 +448,11 @@ export async function transitionOrderStage(
 
   if (before.terminal === "canceled" || before.terminal === "refunded") {
     throw new StageError("terminal", "Order is canceled or refunded; its timeline has ended.");
+  }
+
+  // A till sale sold before its prescription (lib/rx-pending.ts) does not go to the lab until it is in.
+  if (target !== "confirmed" && (await rxPendingOf(container, orderId))) {
+    throw new StageError("rx_pending", "The prescription of this order is still pending; add it from the sale first.", { stage: before.stage });
   }
 
   const allowed = before.next_stages;

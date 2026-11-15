@@ -128,7 +128,8 @@ export function limitedSale(sale: SaleRow, contact?: CustomerContact | null, wit
     limited: true,
   };
   if (withPayments) {
-    row.payments = sale.payments;
+    // The collection view: what was paid and how, without the reference data each method asked for.
+    row.payments = sale.payments.map((p) => ({ ...p, details: null }));
     row.has_wearing_photo = sale.has_wearing_photo;
   }
   return row;

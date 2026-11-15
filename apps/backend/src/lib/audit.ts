@@ -39,6 +39,8 @@ export const AUDIT_ACTIONS = [
   "sale.wearing_photo_view",
   "payment.method",
   "payment.collect",
+  // A registration mistake in the payments of a sale (lib/payment-correction-data.ts).
+  "payment.correct",
   "insurance.paid",
   "document.print",
   "document.email",

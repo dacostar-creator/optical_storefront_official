@@ -52,6 +52,7 @@ import {
 import { storedVerifiedByUser, type LensRxDesign } from "./pos-lens-rules";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder } from "./sale-facts";
+import { attachLatePrescription, lineHasLenses } from "./rx-pending";
 import { DELETE_REASON_MAX, DELETE_REASONS, INTERNAL_NOTE_MAX, type DeleteReason } from "./sale-permissions";
 
 const pgOf = (c: MedusaContainer) => c.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
@@ -197,7 +198,8 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
   let rxId: string | null = null;
   if (p.prescription) {
     rxId = (order?.items ?? []).map((i) => i.metadata?.prescription_id).find((v): v is string => typeof v === "string" && v.length > 0) ?? null;
-    if (!rxId) throw new PosError("no_prescription_on_sale", 409);
+    // No prescription yet: only a sale with lenses can take one (its prescription was left pending, lib/rx-pending.ts).
+    if (!rxId && !(order?.items ?? []).some((i) => lineHasLenses(i.metadata))) throw new PosError("no_prescription_on_sale", 409);
     const { contexts, designs } = await rxChecksOf(container, order?.items ?? []);
     checkPrescriptions(container, { new: { rx: p.prescription.rx } as never, worn: null }, true, contexts, designs);
   }
@@ -245,6 +247,10 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
         updated_at: new Date(),
       });
     changed.push("prescription");
+  } else if (p.prescription && order) {
+    // The prescription that was pending: a new record with its Rx number, linked to the lens lines.
+    await attachLatePrescription(container, { saleId: sale.id, orderId: order.id, customerId: sale.customer_id, rx: p.prescription.rx, rxDate: p.prescription.rx_date });
+    changed.push("prescription");
   }
   const salePatch: Record<string, unknown> = {};
   if (p.delivery !== undefined && p.delivery !== sale.delivery) { salePatch.delivery = p.delivery; changed.push("delivery"); }
@@ -262,6 +268,10 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
   await recordAudit(container, { actorId, action: "sale.edit", entity: "pos_sale", entityId: sale.id, establishmentId: sale.establishment_id, before: { number: sale.number }, after: { changed } });
   if (order && (changed.includes("customer") || changed.includes("delivery") || changed.includes("promised_on"))) {
     void syncOrderToSheet(container, order.id, "venta editada", undefined, { history: true });
+  }
+  // A prescription that was pending: the dashboards' rows say «with prescription» now.
+  if (order && changed.includes("prescription")) {
+    await projectOrder(container, order.id).catch((e) => logOf(container).warn(`[pos] edit ${sale.number}: facts not reprojected: ${(e as Error).message}`));
   }
   return { sale: (await getSale(container, sale.id)) as SaleRow, changed };
 }
